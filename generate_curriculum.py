@@ -102,7 +102,7 @@ STATE [A, B, C, D, E] || OPS SWAP(0,2) | ROTATE_LEFT(1) | REVERSE(1,4) || QUERY 
 - **Level 3 (Hard)**: 13-20 elements, 20-50 operations
 
 ## Citation
-Based on methodology from "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
+Created by Eric Florenzano (2025). Methodology inspired by "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
 """,
         "task_type": "state_tracking",
         "skills_tested": ["mutable_state", "non_commutative_composition", "mental_computation"],
@@ -151,7 +151,7 @@ Ex1: [A B C] -> [C B A] | Ex2: [X Y Z W] -> [W Z Y X] | Query: [P Q R] -> [R Q P
 - **Level 3**: 1-3 examples, complexity 2-3 rules
 
 ## Citation
-Based on methodology from "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
+Created by Eric Florenzano (2025). Methodology inspired by "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
 """,
         "task_type": "rule_induction",
         "skills_tested": ["pattern_recognition", "few_shot_learning", "function_inference"],
@@ -193,7 +193,7 @@ EDGES A:alpha->beta | B:red->blue | A:beta->gamma | B:blue->green || QUERY A:alp
 - **Level 3**: 10-15 nodes, 4-8 hops, random/blocked patterns
 
 ## Citation
-Based on methodology from "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
+Created by Eric Florenzano (2025). Methodology inspired by "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
 """,
         "task_type": "source_separation",
         "skills_tested": ["selective_attention", "noise_filtering", "stream_tracking"],
@@ -242,7 +242,7 @@ INPUTS x0=1 x1=0 x2=1 x3=1 || GATES g0=XOR(x0,x1) | g1=XOR(x2,x3) | g2=XOR(g0,g1
 - **Level 3**: 5-6 inputs, depth 5-8, ~50% XOR gates
 
 ## Citation
-Based on methodology from "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
+Created by Eric Florenzano (2025). Methodology inspired by "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
 """,
         "task_type": "boolean_computation",
         "skills_tested": ["non_linear_computation", "circuit_evaluation", "parity"],
@@ -287,20 +287,8 @@ Each sample includes metadata about task type, difficulty, and specific paramete
 
 Each split maintains the same task/difficulty distribution.
 
-## Usage
-```python
-from datasets import load_dataset
-ds = load_dataset("your-username/synthetic-playground")
-
-# Filter by task
-dyna_samples = ds['train'].filter(lambda x: x['task'] == 'dyna')
-
-# Filter by difficulty
-hard_samples = ds['train'].filter(lambda x: x['difficulty'] == 3)
-```
-
 ## Citation
-Based on methodology from "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
+Created by Eric Florenzano (2025). Methodology inspired by "Physics of Language Models: Part 4.1" by Allen-Zhu & Li.
 """
 
 
@@ -593,10 +581,14 @@ class CurriculumGenerator:
 def create_dataset_card(
     task_names: List[str],
     config: CurriculumConfig,
-    samples_by_split: Dict[str, List[Dict]]
+    samples_by_split: Dict[str, List[Dict]],
+    hub_repo: Optional[str] = None
 ) -> str:
     """Create a README.md for the HuggingFace dataset."""
-    
+
+    # Use provided hub_repo or generate a placeholder
+    repo_name = hub_repo or "ericflo/synthlm-dataset"
+
     if len(task_names) == 1:
         task_name = task_names[0]
         description = TASK_DESCRIPTIONS[task_name]['description']
@@ -687,7 +679,7 @@ Each sample contains:
 from datasets import load_dataset
 
 # Load entire dataset
-ds = load_dataset("your-username/dataset-name")
+ds = load_dataset("{repo_name}")
 
 # Access splits
 train_data = ds['train']
@@ -706,10 +698,12 @@ easy_samples = ds['train'].filter(lambda x: x['difficulty'] == 1)
 If you use this dataset, please cite:
 
 ```bibtex
-@article{{allenzhu2024physics,
-  title={{Physics of Language Models: Part 4.1, Architecture Design}},
-  author={{Allen-Zhu, Zeyuan and Li, Yuanzhi}},
-  year={{2024}}
+@misc{{florenzano2025synthlm,
+  title={{Synthetic Pre-training Playground: Tasks for LM Architecture Evaluation}},
+  author={{Florenzano, Eric}},
+  year={{2025}},
+  url={{https://huggingface.co/datasets/{repo_name}}},
+  note={{Methodology inspired by Allen-Zhu \\& Li's "Physics of Language Models"}}
 }}
 ```
 """
@@ -730,7 +724,7 @@ def push_to_hub(
         raise ImportError("Please install datasets: pip install datasets")
     
     # Create dataset card
-    card_content = create_dataset_card(task_names, config, samples_by_split)
+    card_content = create_dataset_card(task_names, config, samples_by_split, hub_repo=repo_id)
     
     # Push to hub
     dataset_dict.push_to_hub(
@@ -955,7 +949,7 @@ Examples:
         generator.save_local(samples_by_split, output_dir)
         
         # Also save README
-        card = create_dataset_card(task_names, config, samples_by_split)
+        card = create_dataset_card(task_names, config, samples_by_split, hub_repo=args.hub_repo)
         with open(output_dir / 'README.md', 'w') as f:
             f.write(card)
         print(f"✓ Saved to {output_dir}")
