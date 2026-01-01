@@ -160,14 +160,16 @@ python run_demo.py  # Runs all tests and shows demonstrations
 ## File Structure
 
 ```
-synthetic_tasks/
+synthlm/
 ├── __init__.py              # Package exports
 ├── task_dyna.py             # Dynamic State Tracking
-├── task_inducto.py          # In-Context Rule Induction  
+├── task_inducto.py          # In-Context Rule Induction
 ├── task_filtro.py           # Interleaved Source Separation
 ├── task_logic.py            # Boolean Circuit Evaluation
 ├── generate_curriculum.py   # CLI for dataset generation & HuggingFace upload
+├── evaluate.py              # CLI for model evaluation via OpenAI-compatible APIs
 ├── run_demo.py              # Comprehensive test suite & demos
+├── pyproject.toml           # Package configuration & dependencies
 └── README.md                # This file
 ```
 
@@ -260,6 +262,189 @@ Each sample contains:
   "sample_id": "dyna_1_train_0",
   "metadata": "{...}"
 }
+```
+
+---
+
+## Model Evaluation CLI
+
+The `evaluate.py` script provides a comprehensive evaluation framework for testing any language model
+against SynthLM tasks via OpenAI-compatible APIs.
+
+### Features
+
+- **Universal API Support**: Works with any OpenAI-compatible endpoint (LM Studio, vLLM, llama.cpp, OpenRouter, OpenAI, etc.)
+- **Async with Rate Limiting**: Configurable requests-per-minute and concurrent request limits
+- **Resume Capability**: Interrupted runs can be resumed from where they left off
+- **Reasoning Model Support**: Handles `<think>` tags and `reasoning` fields from models like DeepSeek, Qwen-QwQ, gpt-oss
+- **Structured Output**: JSONL per-sample results + JSON summary for easy analysis and graphing
+
+### Installation
+
+```bash
+pip install httpx tqdm
+# or with uv
+uv pip install httpx tqdm
+```
+
+### Quick Start
+
+```bash
+# Evaluate a local model (LM Studio, vLLM, llama.cpp)
+python evaluate.py --base-url http://localhost:8000/v1 --model llama-3.1-8b
+
+# Evaluate via OpenRouter
+python evaluate.py --base-url https://openrouter.ai/api/v1 \
+    --model meta-llama/llama-3.1-8b-instruct \
+    --api-key $OPENROUTER_API_KEY
+
+# Evaluate specific tasks and difficulties
+python evaluate.py --base-url http://localhost:8000/v1 --model qwen2.5-7b \
+    --tasks dyna logic \
+    --difficulties 1 2 \
+    --samples-per-combo 100
+
+# Resume an interrupted run
+python evaluate.py --resume ./eval_results/eval_20251231_143000
+
+# Dry run to see what would be evaluated
+python evaluate.py --base-url http://localhost:8000/v1 --model test --dry-run
+```
+
+### Command-Line Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--base-url` | (required) | OpenAI-compatible API base URL |
+| `--model` | (required) | Model name/ID to evaluate |
+| `--api-key` | None | API key (or set `SYNTHLM_API_KEY` env var) |
+| `--max-tokens` | 2048 | Max tokens for model response |
+| `--temperature` | 0.0 | Sampling temperature (0 = deterministic) |
+| `--timeout` | 120 | Request timeout in seconds |
+| `--tasks` | all | Tasks to evaluate (dyna/inducto/filtro/logic) |
+| `--difficulties` | 1 2 3 | Difficulty levels to test |
+| `--samples-per-combo` | 100 | Samples per task+difficulty combination |
+| `--requests-per-minute` | 60 | Rate limit (requests per minute) |
+| `--max-concurrent` | 10 | Max concurrent API requests |
+| `--output-dir` | auto | Output directory for results |
+| `--resume` | None | Resume from existing run directory |
+| `--seed` | 42 | Random seed for reproducibility |
+| `--quiet` | False | Suppress progress output |
+| `--dry-run` | False | Show plan without calling API |
+
+### Output Format
+
+Each evaluation run creates a directory with:
+
+```
+eval_results/eval_20251231_143000/
+├── results.jsonl    # Per-sample detailed results
+├── summary.json     # Aggregated statistics
+└── state.json       # Resume state (completed sample IDs)
+```
+
+#### Per-Sample Results (`results.jsonl`)
+
+```json
+{
+  "sample_id": "dyna_1_42",
+  "task": "dyna",
+  "difficulty": 1,
+  "input_text": "STATE [A, B, C] || OPS SWAP(0,2) || QUERY position 1 ->",
+  "target": "B",
+  "raw_response": "Working through the operations...\n\nANSWER: B",
+  "extracted_answer": "B",
+  "is_correct": true,
+  "latency_ms": 245.3,
+  "prompt_tokens": 89,
+  "completion_tokens": 42,
+  "error": null,
+  "timestamp": "2025-12-31T14:30:45.123Z",
+  "metadata": {"state_size": 3, "num_ops": 1, "...": "..."}
+}
+```
+
+#### Summary Statistics (`summary.json`)
+
+```json
+{
+  "run_id": "eval_20251231_143000",
+  "model": "llama-3.1-8b",
+  "overall": {
+    "total_samples": 1200,
+    "correct": 847,
+    "accuracy": 0.706
+  },
+  "by_task": {
+    "dyna": {"total": 300, "correct": 234, "accuracy": 0.78, "by_difficulty": {...}},
+    "inducto": {"total": 300, "correct": 196, "accuracy": 0.65, "by_difficulty": {...}},
+    "filtro": {"total": 300, "correct": 216, "accuracy": 0.72, "by_difficulty": {...}},
+    "logic": {"total": 300, "correct": 201, "accuracy": 0.67, "by_difficulty": {...}}
+  },
+  "by_difficulty": {
+    "1": {"total": 400, "correct": 372, "accuracy": 0.93},
+    "2": {"total": 400, "correct": 312, "accuracy": 0.78},
+    "3": {"total": 400, "correct": 163, "accuracy": 0.41}
+  },
+  "timing": {"avg_latency_ms": 312.4, "p50_latency_ms": 289.1, "p95_latency_ms": 567.3}
+}
+```
+
+### Console Output
+
+```
+Evaluating llama-3.1-8b on 4 tasks x 3 difficulties x 100 samples = 1200 total
+[████████████████████████████████████████] 1200/1200 [15:23<00:00]
+
+=================================================================
+RESULTS SUMMARY
+=================================================================
+Model: llama-3.1-8b
+Total: 847/1200 correct (70.6%)
+
+By Task:
+  DYNA     78.0% (234/300)  [L1: 95% | L2: 82% | L3: 57%]
+  INDUCTO  65.3% (196/300)  [L1: 88% | L2: 71% | L3: 37%]
+  FILTRO   72.0% (216/300)  [L1: 91% | L2: 78% | L3: 47%]
+  LOGIC    67.0% (201/300)  [L1: 89% | L2: 74% | L3: 38%]
+
+By Difficulty:
+  Easy     93.0% (372/400)
+  Medium   78.0% (312/400)
+  Hard     40.8% (163/400)
+
+Timing: avg 312ms, p50 289ms, p95 567ms
+Tokens: 127,840 prompt + 9,600 completion = 137,440 total
+
+Results saved to: ./eval_results/eval_20251231_143000/
+=================================================================
+```
+
+### Mini-Scaling Law Analysis
+
+The output is designed for easy generation of scaling law graphs. Example Python analysis:
+
+```python
+import json
+import matplotlib.pyplot as plt
+
+# Load summary
+with open('eval_results/eval_20251231_143000/summary.json') as f:
+    summary = json.load(f)
+
+# Plot accuracy by difficulty for each task
+tasks = ['dyna', 'inducto', 'filtro', 'logic']
+difficulties = [1, 2, 3]
+
+for task in tasks:
+    accs = [summary['by_task'][task]['by_difficulty'][str(d)]['accuracy'] for d in difficulties]
+    plt.plot(difficulties, accs, marker='o', label=task.upper())
+
+plt.xlabel('Difficulty Level')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.title('SynthLM Task Performance by Difficulty')
+plt.savefig('scaling_law.png')
 ```
 
 ---
